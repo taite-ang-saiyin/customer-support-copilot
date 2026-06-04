@@ -62,16 +62,23 @@ class VectorStore:
     def delete_document(self, doc_id: str) -> None:
         self.collection.delete(where={"doc_id": doc_id})
 
+    def delete_chunks(self, chunk_ids: list[str]) -> None:
+        if chunk_ids:
+            self.collection.delete(ids=chunk_ids)
+
     @staticmethod
     def _build_where(filters: dict[str, Any] | None) -> dict[str, Any] | None:
         if not filters:
             return None
 
-        simple_filters = [
-            {key: value}
-            for key, value in filters.items()
-            if value is not None and isinstance(value, str | int | float | bool)
-        ]
+        simple_filters = []
+        for key, value in filters.items():
+            if value is None:
+                continue
+            if isinstance(value, str | int | float | bool):
+                simple_filters.append({key: value})
+            elif isinstance(value, list) and value:
+                simple_filters.append({key: {"$in": value}})
         if not simple_filters:
             return None
         if len(simple_filters) == 1:

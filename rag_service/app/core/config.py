@@ -18,6 +18,20 @@ class Settings(BaseSettings):
     app_name: str = Field(default="AI Customer Support Copilot RAG Service", alias="APP_NAME")
     env: str = Field(default="development", alias="ENV")
     chroma_collection: str = "support_knowledge"
+    internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
+    internal_allowed_access_levels: str = Field(
+        default="support,public",
+        alias="INTERNAL_ALLOWED_ACCESS_LEVELS",
+    )
+    max_upload_size_bytes: int = Field(default=10 * 1024 * 1024, alias="MAX_UPLOAD_SIZE_BYTES")
+
+    @property
+    def allowed_access_levels(self) -> list[str]:
+        return [
+            access_level.strip()
+            for access_level in self.internal_allowed_access_levels.split(",")
+            if access_level.strip()
+        ]
 
 
 @lru_cache

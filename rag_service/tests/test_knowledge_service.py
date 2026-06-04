@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.db.database import Base
-from app.db.models import KnowledgeChunk, RetrievalLog
+from app.db.models import KnowledgeChunk, KnowledgeDoc, RetrievalLog
 from app.schemas.knowledge import SearchRequest
 from app.services.knowledge_service import KnowledgeService
 
@@ -70,6 +70,11 @@ class FakeVectorStore:
         }
 
 
+class FailingEmbeddingService:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding service unavailable")
+
+
 def test_upload_search_and_log_flow() -> None:
     temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
     settings.upload_dir = str(temp_root / "uploads")
@@ -124,6 +129,88 @@ Approved refunds are submitted within 2 business days.
         assert search_response.results[0].score > 0
         assert len(logs) == 1
         assert logs[0].retrieved_chunk_ids == [search_response.results[0].chunk_id]
+    finally:
+        db.close()
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_upload_rejects_invalid_file_type(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    monkeypatch.setattr(settings, "upload_dir", str(temp_root / "uploads"))
+    service = KnowledgeService(
+        embedding_service=FakeEmbeddingService(),
+        vector_store=FakeVectorStore(),
+    )
+    file = UploadFile(filename="malware.exe", file=BytesIO(b"nope"))
+
+    try:
+        try:
+            service._save_upload(file)
+        except ValueError as exc:
+            assert "Unsupported file type" in str(exc)
+        else:
+            raise AssertionError("Expected invalid file type to be rejected")
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_upload_rejects_oversized_file(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    monkeypatch.setattr(settings, "upload_dir", str(temp_root / "uploads"))
+    monkeypatch.setattr(settings, "max_upload_size_bytes", 4)
+    service = KnowledgeService(
+        embedding_service=FakeEmbeddingService(),
+        vector_store=FakeVectorStore(),
+    )
+    file = UploadFile(filename="policy.md", file=BytesIO(b"too large"))
+
+    try:
+        try:
+            service._save_upload(file)
+        except ValueError as exc:
+            assert "too large" in str(exc)
+        else:
+            raise AssertionError("Expected oversized file to be rejected")
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_indexing_failure_marks_document_failed(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    monkeypatch.setattr(settings, "upload_dir", str(temp_root / "uploads"))
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        service = KnowledgeService(
+            embedding_service=FailingEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+        file = UploadFile(
+            filename="refund_policy.md",
+            file=BytesIO(b"# Refund Policy\n\nRefunds can be reviewed."),
+        )
+
+        try:
+            service.upload_and_index(
+                db=db,
+                file=file,
+                title="Refund Policy",
+                source_type="policy",
+                category="billing",
+                access_level="support",
+                language="en",
+            )
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("Expected indexing failure")
+
+        doc = db.scalars(select(KnowledgeDoc)).one()
+        assert doc.indexing_status == "failed"
+        assert "embedding service unavailable" in (doc.indexing_error or "")
     finally:
         db.close()
         shutil.rmtree(temp_root, ignore_errors=True)

@@ -12,6 +12,7 @@ class DocumentResponse(BaseModel):
     version: int
     status: str
     chunk_count: int
+    indexing_error: str | None = None
 
 
 class DocumentSummary(BaseModel):
@@ -22,6 +23,8 @@ class DocumentSummary(BaseModel):
     source_type: str
     file_name: str
     version: int
+    indexing_status: str
+    indexing_error: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,17 +29,29 @@ def load_cases(path: Path) -> list[EvaluationCase]:
     ]
 
 
-def search(base_url: str, case: EvaluationCase, timeout: float) -> list[dict[str, Any]]:
+def search(
+    base_url: str,
+    case: EvaluationCase,
+    timeout: float,
+    api_key: str | None,
+) -> list[dict[str, Any]]:
+    headers = {"X-API-Key": api_key} if api_key else {}
     response = httpx.post(
         f"{base_url.rstrip('/')}/knowledge/search",
         json={"query": case.query, "top_k": case.top_k},
+        headers=headers,
         timeout=timeout,
     )
     response.raise_for_status()
     return response.json().get("results", [])
 
 
-def evaluate(base_url: str, cases: list[EvaluationCase], timeout: float) -> dict[str, Any]:
+def evaluate(
+    base_url: str,
+    cases: list[EvaluationCase],
+    timeout: float,
+    api_key: str | None,
+) -> dict[str, Any]:
     reciprocal_ranks: list[float] = []
     top_1_hits = 0
     top_k_hits = 0
@@ -47,7 +60,7 @@ def evaluate(base_url: str, cases: list[EvaluationCase], timeout: float) -> dict
     for index, case in enumerate(cases, start=1):
         print(f"[{index}/{len(cases)}] {case.query}")
         try:
-            results = search(base_url, case, timeout=timeout)
+            results = search(base_url, case, timeout=timeout, api_key=api_key)
         except httpx.ReadTimeout:
             failures.append(
                 {
@@ -56,6 +69,19 @@ def evaluate(base_url: str, cases: list[EvaluationCase], timeout: float) -> dict
                     "actual_top_result": (
                         f"Request timed out after {timeout} seconds. "
                         "The embedding model may still be loading, or the API may be stuck."
+                    ),
+                }
+            )
+            reciprocal_ranks.append(0)
+            continue
+        except httpx.HTTPStatusError as exc:
+            failures.append(
+                {
+                    "query": case.query,
+                    "expected": f"{case.expected_doc} > {case.expected_section}",
+                    "actual_top_result": (
+                        f"API returned HTTP {exc.response.status_code}. "
+                        "Check --api-key or INTERNAL_API_KEY."
                     ),
                 }
             )
@@ -169,10 +195,15 @@ def main() -> None:
         default=180,
         help="HTTP timeout per search request in seconds.",
     )
+    parser.add_argument(
+        "--api-key",
+        default=os.getenv("INTERNAL_API_KEY"),
+        help="API key for X-API-Key. Defaults to INTERNAL_API_KEY.",
+    )
     args = parser.parse_args()
 
     cases = load_cases(Path(args.cases))
-    report = evaluate(args.base_url, cases, timeout=args.timeout)
+    report = evaluate(args.base_url, cases, timeout=args.timeout, api_key=args.api_key)
     print_report(report)
 
 

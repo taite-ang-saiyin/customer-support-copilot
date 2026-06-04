@@ -1,9 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_api_key
+from app.core.config import settings
+from app.db.database import SessionLocal
 from app.schemas.knowledge import (
     DocumentDetail,
     DocumentListResponse,
@@ -15,7 +17,7 @@ from app.schemas.knowledge import (
 )
 from app.services.knowledge_service import KnowledgeService
 
-router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+router = APIRouter(prefix="/knowledge", tags=["knowledge"], dependencies=[Depends(require_api_key)])
 _knowledge_service: KnowledgeService | None = None
 
 
@@ -28,6 +30,7 @@ def get_knowledge_service() -> KnowledgeService:
 
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(...),
     source_type: str = Form(...),
@@ -38,14 +41,28 @@ def upload_document(
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> Any:
     try:
-        return service.upload_and_index(
+        doc = service.create_upload_record(
             db=db,
             file=file,
             title=title,
             source_type=source_type,
-            category=category,
-            access_level=access_level,
-            language=language,
+        )
+        background_tasks.add_task(
+            _index_uploaded_document,
+            doc.doc_id,
+            category or source_type,
+            access_level,
+            language,
+        )
+        return DocumentResponse(
+            doc_id=doc.doc_id,
+            title=doc.title,
+            source_type=doc.source_type,
+            file_name=doc.file_name,
+            version=doc.version,
+            status=doc.indexing_status,
+            chunk_count=0,
+            indexing_error=doc.indexing_error,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -67,7 +84,11 @@ def search_knowledge(
     db: Session = Depends(get_db),
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> SearchResponse:
-    return service.search(db=db, request=payload)
+    return service.search(
+        db=db,
+        request=payload,
+        allowed_access_levels=settings.allowed_access_levels,
+    )
 
 
 @router.get("/docs", response_model=DocumentListResponse)
@@ -100,6 +121,24 @@ def get_document(
     return doc
 
 
+@router.get("/docs/{doc_id}/status")
+def get_document_status(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> dict[str, Any]:
+    doc = service.get_document(db=db, doc_id=doc_id)
+    if doc is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return {
+        "doc_id": doc.doc_id,
+        "indexing_status": doc.indexing_status,
+        "indexing_error": doc.indexing_error,
+        "chunk_count": doc.chunk_count,
+        "updated_at": doc.updated_at,
+    }
+
+
 @router.delete("/docs/{doc_id}")
 def delete_document(
     doc_id: str,
@@ -110,3 +149,22 @@ def delete_document(
     if deleted_chunks is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return {"doc_id": doc_id, "status": "deleted", "deleted_chunks": deleted_chunks}
+
+
+def _index_uploaded_document(
+    doc_id: str,
+    category: str,
+    access_level: str,
+    language: str,
+) -> None:
+    db = SessionLocal()
+    try:
+        get_knowledge_service().index_document_by_id(
+            db=db,
+            doc_id=doc_id,
+            category=category,
+            access_level=access_level,
+            language=language,
+        )
+    finally:
+        db.close()

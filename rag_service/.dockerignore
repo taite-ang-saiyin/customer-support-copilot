@@ -1,0 +1,12 @@
+.env
+.pytest_cache
+.pytest_workspace
+__pycache__
+*.pyc
+chroma_db
+uploads
+.venv
+venv
+*.egg-info
+AI Customer Support Copilot.pdf
+System_Design.jpg

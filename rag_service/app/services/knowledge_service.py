@@ -1,5 +1,5 @@
 import os
-import shutil
+import re
 import uuid
 from pathlib import Path
 from typing import Any
@@ -44,19 +44,12 @@ class KnowledgeService:
         access_level: str,
         language: str,
     ) -> DocumentResponse:
-        file_path = self._save_upload(file)
-        doc = KnowledgeDoc(
-            doc_id=self._new_id("doc"),
+        doc = self.create_upload_record(
+            db=db,
+            file=file,
             title=title,
             source_type=source_type,
-            file_name=file.filename or Path(file_path).name,
-            file_path=file_path,
-            version=1,
         )
-        db.add(doc)
-        db.commit()
-        db.refresh(doc)
-
         chunks = self._index_document(
             db=db,
             doc=doc,
@@ -65,14 +58,49 @@ class KnowledgeService:
             language=language,
         )
 
-        return DocumentResponse(
-            doc_id=doc.doc_id,
-            title=doc.title,
-            source_type=doc.source_type,
-            file_name=doc.file_name,
-            version=doc.version,
-            status="indexed",
-            chunk_count=chunks,
+        return self._document_response(doc=doc, chunk_count=chunks)
+
+    def create_upload_record(
+        self,
+        db: Session,
+        file: UploadFile,
+        title: str,
+        source_type: str,
+    ) -> KnowledgeDoc:
+        file_path, safe_original_name = self._save_upload(file)
+        doc = KnowledgeDoc(
+            doc_id=self._new_id("doc"),
+            title=title,
+            source_type=source_type,
+            file_name=safe_original_name,
+            file_path=file_path,
+            version=1,
+            indexing_status="pending",
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        return doc
+
+    def index_document_by_id(
+        self,
+        db: Session,
+        doc_id: str,
+        category: str,
+        access_level: str,
+        language: str,
+        force: bool = False,
+    ) -> int:
+        doc = db.get(KnowledgeDoc, doc_id)
+        if doc is None:
+            raise ValueError("Document not found")
+        return self._index_document(
+            db=db,
+            doc=doc,
+            category=category or doc.source_type,
+            access_level=access_level,
+            language=language,
+            force=force,
         )
 
     def reindex(self, db: Session, doc_id: str | None = None, force: bool = False) -> int:
@@ -98,13 +126,19 @@ class KnowledgeService:
             )
         return len(docs)
 
-    def search(self, db: Session, request: SearchRequest) -> SearchResponse:
+    def search(
+        self,
+        db: Session,
+        request: SearchRequest,
+        allowed_access_levels: list[str] | None = None,
+    ) -> SearchResponse:
         top_k = request.top_k or settings.top_k
         query_embedding = self.embedding_service.embed_query(request.query)
+        filters = self._safe_search_filters(request.filters, allowed_access_levels)
         matches = self.vector_store.query(
             query_embedding=query_embedding,
             top_k=top_k,
-            filters=request.filters,
+            filters=filters,
         )
 
         chunk_ids = [match["chunk_id"] for match in matches]
@@ -119,6 +153,8 @@ class KnowledgeService:
         for match in matches:
             chunk = chunks_by_id.get(match["chunk_id"])
             if not chunk:
+                continue
+            if allowed_access_levels is not None and chunk.access_level not in allowed_access_levels:
                 continue
             doc = chunk.document
             citation = self._citation(doc.title, chunk.section_title)
@@ -181,6 +217,8 @@ class KnowledgeService:
             file_name=doc.file_name,
             file_path=doc.file_path,
             version=doc.version,
+            indexing_status=doc.indexing_status,
+            indexing_error=doc.indexing_error,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
             chunk_count=len(doc.chunks),
@@ -206,50 +244,74 @@ class KnowledgeService:
         replace_existing: bool = True,
         force: bool = False,
     ) -> int:
-        if replace_existing:
-            self.vector_store.delete_document(doc.doc_id)
-            db.query(KnowledgeChunk).filter(KnowledgeChunk.doc_id == doc.doc_id).delete()
-            db.commit()
-
-        text = self._extract_document_text(doc)
-        text_chunks = chunk_markdown(text)
-        chunk_rows = [
-            KnowledgeChunk(
-                chunk_id=self._new_id("chunk"),
-                doc_id=doc.doc_id,
-                chunk_text=text_chunk.text,
-                section_title=text_chunk.section_title,
-                category=category,
-                language=language,
-                access_level=access_level,
-                chunk_index=text_chunk.chunk_index,
-            )
-            for text_chunk in text_chunks
+        old_chunk_ids = [
+            chunk_id
+            for (chunk_id,) in db.query(KnowledgeChunk.chunk_id)
+            .filter(KnowledgeChunk.doc_id == doc.doc_id)
+            .all()
         ]
-        db.add_all(chunk_rows)
+        doc.indexing_status = "processing"
+        doc.indexing_error = None
         doc.updated_at = utcnow()
-        if force:
-            doc.version += 1
         db.commit()
 
-        embeddings = self.embedding_service.embed_texts([chunk.chunk_text for chunk in chunk_rows])
-        self.vector_store.upsert_chunks(
-            chunk_ids=[chunk.chunk_id for chunk in chunk_rows],
-            embeddings=embeddings,
-            documents=[chunk.chunk_text for chunk in chunk_rows],
-            metadatas=[
-                {
-                    "doc_id": doc.doc_id,
-                    "source": doc.file_name,
-                    "section": chunk.section_title,
-                    "category": chunk.category,
-                    "language": chunk.language,
-                    "access_level": chunk.access_level,
-                }
-                for chunk in chunk_rows
-            ],
-        )
-        return len(chunk_rows)
+        try:
+            text = self._extract_document_text(doc)
+            text_chunks = chunk_markdown(text)
+            chunk_rows = [
+                KnowledgeChunk(
+                    chunk_id=self._new_id("chunk"),
+                    doc_id=doc.doc_id,
+                    chunk_text=text_chunk.text,
+                    section_title=text_chunk.section_title,
+                    category=category,
+                    language=language,
+                    access_level=access_level,
+                    chunk_index=text_chunk.chunk_index,
+                )
+                for text_chunk in text_chunks
+            ]
+            embeddings = self.embedding_service.embed_texts(
+                [chunk.chunk_text for chunk in chunk_rows]
+            )
+            self.vector_store.upsert_chunks(
+                chunk_ids=[chunk.chunk_id for chunk in chunk_rows],
+                embeddings=embeddings,
+                documents=[chunk.chunk_text for chunk in chunk_rows],
+                metadatas=[
+                    {
+                        "doc_id": doc.doc_id,
+                        "source": doc.file_name,
+                        "section": chunk.section_title,
+                        "category": chunk.category,
+                        "language": chunk.language,
+                        "access_level": chunk.access_level,
+                    }
+                    for chunk in chunk_rows
+                ],
+            )
+
+            if replace_existing and old_chunk_ids:
+                self._delete_vector_chunks(old_chunk_ids)
+                db.query(KnowledgeChunk).filter(KnowledgeChunk.doc_id == doc.doc_id).delete()
+            db.add_all(chunk_rows)
+            doc.indexing_status = "indexed"
+            doc.indexing_error = None
+            doc.updated_at = utcnow()
+            if force:
+                doc.version += 1
+            db.commit()
+            db.refresh(doc)
+            return len(chunk_rows)
+        except Exception as exc:
+            db.rollback()
+            doc = db.get(KnowledgeDoc, doc.doc_id)
+            if doc is not None:
+                doc.indexing_status = "failed"
+                doc.indexing_error = str(exc)[:2000]
+                doc.updated_at = utcnow()
+                db.commit()
+            raise
 
     def _extract_document_text(self, doc: KnowledgeDoc) -> str:
         if Path(doc.file_path).suffix.lower() != ".pdf":
@@ -266,21 +328,72 @@ class KnowledgeService:
         stem = Path(file_name).stem
         return Path(settings.upload_dir) / "processed" / f"{stem}.cleaned.md"
 
-    def _save_upload(self, file: UploadFile) -> str:
-        original_name = file.filename or "knowledge.txt"
+    def _save_upload(self, file: UploadFile) -> tuple[str, str]:
+        original_name = self._safe_original_filename(file.filename or "knowledge.txt")
         extension = Path(original_name).suffix.lower()
         if extension not in SUPPORTED_EXTENSIONS:
-            raise ValueError("Only Markdown, txt, and PDF files are supported")
+            raise ValueError("Unsupported file type. Allowed extensions: .md, .markdown, .txt, .pdf")
 
         upload_dir = Path(settings.upload_dir)
         upload_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}_{Path(original_name).name}"
+        safe_name = f"{uuid.uuid4().hex}_{original_name}"
         file_path = upload_dir / safe_name
 
+        total_size = 0
         with file_path.open("wb") as output:
-            shutil.copyfileobj(file.file, output)
+            while chunk := file.file.read(1024 * 1024):
+                total_size += len(chunk)
+                if total_size > settings.max_upload_size_bytes:
+                    output.close()
+                    file_path.unlink(missing_ok=True)
+                    raise ValueError(
+                        f"Uploaded file is too large. Maximum size is "
+                        f"{settings.max_upload_size_bytes} bytes."
+                    )
+                output.write(chunk)
 
-        return os.fspath(file_path)
+        return os.fspath(file_path), original_name
+
+    def _delete_vector_chunks(self, chunk_ids: list[str]) -> None:
+        delete_chunks = getattr(self.vector_store, "delete_chunks", None)
+        if delete_chunks:
+            delete_chunks(chunk_ids)
+            return
+        for chunk_id in chunk_ids:
+            self.vector_store.collection.delete(ids=[chunk_id])
+
+    @staticmethod
+    def _safe_search_filters(
+        filters: dict[str, Any] | None,
+        allowed_access_levels: list[str] | None,
+    ) -> dict[str, Any] | None:
+        safe_filters = {
+            key: value
+            for key, value in (filters or {}).items()
+            if key != "access_level"
+        }
+        if allowed_access_levels is not None:
+            safe_filters["access_level"] = allowed_access_levels or ["__no_access__"]
+        return safe_filters or None
+
+    @staticmethod
+    def _safe_original_filename(file_name: str) -> str:
+        name = Path(file_name).name.strip() or "knowledge.txt"
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
+        return name or "knowledge.txt"
+
+    @staticmethod
+    def _document_response(doc: KnowledgeDoc, chunk_count: int) -> DocumentResponse:
+        return DocumentResponse(
+            doc_id=doc.doc_id,
+            title=doc.title,
+            source_type=doc.source_type,
+            file_name=doc.file_name,
+            version=doc.version,
+            status=doc.indexing_status,
+            chunk_count=chunk_count,
+            indexing_error=doc.indexing_error,
+        )
 
     @staticmethod
     def _citation(title: str, section_title: str) -> str:

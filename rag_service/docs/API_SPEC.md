@@ -2,7 +2,15 @@
 
 ## Overview
 
-This document describes the planned API for the RAG and Knowledge Base service. The backend is not implemented yet.
+This document describes the internal API for the RAG and Knowledge Base service.
+
+All `/knowledge` endpoints require:
+
+```http
+X-API-Key: your-internal-key
+```
+
+Missing or invalid API keys return `401`.
 
 ## POST /knowledge/upload
 
@@ -26,6 +34,7 @@ Parameters:
 
 ```bash
 curl -X POST http://localhost:8000/knowledge/upload \
+  -H "X-API-Key: change-me-dev-key" \
   -F "file=@sample_knowledge/refund_policy.md" \
   -F "title=CloudDesk Refund Policy" \
   -F "source_type=policy" \
@@ -41,9 +50,16 @@ curl -X POST http://localhost:8000/knowledge/upload \
   "title": "CloudDesk Refund Policy",
   "source_type": "policy",
   "file_name": "refund_policy.md",
-  "status": "uploaded"
+  "version": 1,
+  "status": "pending",
+  "chunk_count": 0,
+  "indexing_error": null
 }
 ```
+
+Supported extensions are `.md`, `.markdown`, `.txt`, and `.pdf`. Oversized files are rejected according to `MAX_UPLOAD_SIZE_BYTES`.
+
+The upload endpoint stores the file and schedules indexing in a FastAPI background task. Use `/knowledge/docs/{doc_id}/status` to check progress.
 
 ## POST /knowledge/reindex
 
@@ -67,6 +83,7 @@ If `doc_id` is omitted, the service may reindex all documents.
 ```bash
 curl -X POST http://localhost:8000/knowledge/reindex \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-dev-key" \
   -d "{\"doc_id\":\"doc_001\",\"force\":true}"
 ```
 
@@ -74,9 +91,8 @@ curl -X POST http://localhost:8000/knowledge/reindex \
 
 ```json
 {
-  "status": "queued",
-  "doc_id": "doc_001",
-  "message": "Reindexing request accepted"
+  "status": "completed",
+  "indexed_documents": 1
 }
 ```
 
@@ -104,8 +120,11 @@ Search the knowledge base and return top matching chunks with citations and scor
 ```bash
 curl -X POST http://localhost:8000/knowledge/search \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-dev-key" \
   -d "{\"query\":\"I was charged twice yesterday\",\"top_k\":3}"
 ```
+
+The server enforces `INTERNAL_ALLOWED_ACCESS_LEVELS` during search. Client-provided `access_level` filters are ignored and replaced by the server-side allowed levels.
 
 ### Example Response
 
@@ -143,7 +162,8 @@ List indexed or uploaded knowledge documents.
 ### Example Request
 
 ```bash
-curl http://localhost:8000/knowledge/docs?source_type=policy
+curl "http://localhost:8000/knowledge/docs?source_type=policy" \
+  -H "X-API-Key: change-me-dev-key"
 ```
 
 ### Example Response
@@ -155,7 +175,10 @@ curl http://localhost:8000/knowledge/docs?source_type=policy
       "doc_id": "doc_001",
       "title": "CloudDesk Refund Policy",
       "source_type": "policy",
+      "file_name": "refund_policy.md",
       "version": 1,
+      "indexing_status": "indexed",
+      "indexing_error": null,
       "created_at": "2026-06-01T10:00:00Z",
       "updated_at": "2026-06-01T10:00:00Z"
     }
@@ -177,7 +200,8 @@ Return metadata for one knowledge document.
 ### Example Request
 
 ```bash
-curl http://localhost:8000/knowledge/docs/doc_001
+curl http://localhost:8000/knowledge/docs/doc_001 \
+  -H "X-API-Key: change-me-dev-key"
 ```
 
 ### Example Response
@@ -190,8 +214,42 @@ curl http://localhost:8000/knowledge/docs/doc_001
   "file_name": "refund_policy.md",
   "file_path": "./uploads/refund_policy.md",
   "version": 1,
+  "indexing_status": "indexed",
+  "indexing_error": null,
   "chunk_count": 8,
   "created_at": "2026-06-01T10:00:00Z",
+  "updated_at": "2026-06-01T10:00:00Z"
+}
+```
+
+## GET /knowledge/docs/{doc_id}/status
+
+### Purpose
+
+Return the latest indexing status for one document.
+
+Statuses:
+
+- `pending`
+- `processing`
+- `indexed`
+- `failed`
+
+### Example Request
+
+```bash
+curl http://localhost:8000/knowledge/docs/doc_001/status \
+  -H "X-API-Key: change-me-dev-key"
+```
+
+### Example Response
+
+```json
+{
+  "doc_id": "doc_001",
+  "indexing_status": "indexed",
+  "indexing_error": null,
+  "chunk_count": 8,
   "updated_at": "2026-06-01T10:00:00Z"
 }
 ```
@@ -209,7 +267,8 @@ Delete a document record and remove related chunks and vector entries.
 ### Example Request
 
 ```bash
-curl -X DELETE http://localhost:8000/knowledge/docs/doc_001
+curl -X DELETE http://localhost:8000/knowledge/docs/doc_001 \
+  -H "X-API-Key: change-me-dev-key"
 ```
 
 ### Example Response

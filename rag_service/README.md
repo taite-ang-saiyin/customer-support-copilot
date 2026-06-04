@@ -77,6 +77,12 @@ docker compose up -d
 uvicorn app.main:app --reload
 ```
 
+Set `INTERNAL_API_KEY` in `.env` before using any `/knowledge` endpoint. Clients must send it with:
+
+```bash
+X-API-Key: your-internal-key
+```
+
 On Windows PowerShell:
 
 ```powershell
@@ -100,6 +106,42 @@ EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 TOP_K=3
 APP_NAME=AI Customer Support Copilot RAG Service
 ENV=development
+INTERNAL_API_KEY=change-me-dev-key
+INTERNAL_ALLOWED_ACCESS_LEVELS=support,public
+MAX_UPLOAD_SIZE_BYTES=10485760
+```
+
+`INTERNAL_ALLOWED_ACCESS_LEVELS` is enforced by the server during search. Clients may send normal filters such as `category`, but the API does not trust client-provided `access_level` filters.
+
+`MAX_UPLOAD_SIZE_BYTES` defaults to 10 MB. Supported upload extensions are `.md`, `.markdown`, `.txt`, and `.pdf`.
+
+## Docker Compose
+
+Create `.env` from `.env.example`, change `INTERNAL_API_KEY`, then run:
+
+```bash
+docker compose up --build
+```
+
+The Compose setup starts:
+
+- `rag-api` on `http://localhost:8000`
+- PostgreSQL on port `5432`
+- persistent volumes for uploads, Chroma data, and model cache
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
+```
+
+Authenticated search example:
+
+```bash
+curl -X POST http://localhost:8000/knowledge/search \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-dev-key" \
+  -d "{\"query\":\"I was charged twice yesterday\",\"top_k\":3}"
 ```
 
 ## API Endpoint Summary
@@ -113,7 +155,31 @@ Implemented endpoints:
 | POST | `/knowledge/search` | Retrieve relevant chunks for a query |
 | GET | `/knowledge/docs` | List indexed knowledge documents |
 | GET | `/knowledge/docs/{doc_id}` | View one knowledge document record |
+| GET | `/knowledge/docs/{doc_id}/status` | View document indexing status |
 | DELETE | `/knowledge/docs/{doc_id}` | Remove a document and related chunks |
+
+All `/knowledge` endpoints require `X-API-Key`.
+
+## Indexing Status
+
+Documents use a simple status field:
+
+- `pending`: upload is stored and indexing has not started
+- `processing`: text extraction, chunking, embedding, or vector upsert is running
+- `indexed`: chunks and vectors were written successfully
+- `failed`: indexing failed; `indexing_error` contains the latest error
+
+Uploads through the API return quickly with `pending` and run indexing in a FastAPI background task. Reindexing keeps old chunks and vectors usable until the new index succeeds.
+
+This project still uses `create_all` plus a small startup compatibility check for the new status columns. Add Alembic migrations before treating the database schema as production-managed.
+
+## Tests
+
+Run the test suite from `rag_service/`:
+
+```bash
+pytest
+```
 
 ## Demo Scenario
 
