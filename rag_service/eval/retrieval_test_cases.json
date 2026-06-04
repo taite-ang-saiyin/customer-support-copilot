@@ -1,0 +1,92 @@
+[
+  {
+    "query": "I was charged twice yesterday",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Duplicate Charges",
+    "top_k": 3
+  },
+  {
+    "query": "My card payment failed with CD-PAY-402",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Failed Payments",
+    "top_k": 3
+  },
+  {
+    "query": "I cannot download my invoice PDF",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Invoice Download",
+    "top_k": 3
+  },
+  {
+    "query": "I cannot log in and see CD-AUTH-LOCKED",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "Account Locked",
+    "top_k": 3
+  },
+  {
+    "query": "Our SSO login fails with CD-SSO-403",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "SSO Login Failure",
+    "top_k": 3
+  },
+  {
+    "query": "I lost access to my authenticator app",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "Two-Factor Authentication Issue",
+    "top_k": 3
+  },
+  {
+    "query": "How fast should enterprise urgent issues be handled?",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Response Time Targets",
+    "top_k": 3
+  },
+  {
+    "query": "I want my data deleted",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "Data Deletion Requests",
+    "top_k": 3
+  },
+  {
+    "query": "Email notifications are delayed",
+    "expected_doc": "Known Issues",
+    "expected_section": "Delayed Email Notifications",
+    "top_k": 3
+  },
+  {
+    "query": "The analytics dashboard is loading very slowly",
+    "expected_doc": "Known Issues",
+    "expected_section": "Analytics Dashboard Slow Loading",
+    "top_k": 3
+  },
+  {
+    "query": "A former employee owned our billing account",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Admin Account Recovery",
+    "top_k": 3
+  },
+  {
+    "query": "When should a high-value refund be escalated?",
+    "expected_doc": "Refund Policy",
+    "expected_section": "High-Value Refund Escalation",
+    "top_k": 3
+  },
+  {
+    "query": "Why is VAT appearing on our invoice?",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Tax and VAT Questions",
+    "top_k": 3
+  },
+  {
+    "query": "How do I change the billing contact?",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Billing Contact Change",
+    "top_k": 3
+  },
+  {
+    "query": "The customer mentioned GDPR and wants a privacy review",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "Security And Privacy Escalation",
+    "top_k": 3
+  }
+]

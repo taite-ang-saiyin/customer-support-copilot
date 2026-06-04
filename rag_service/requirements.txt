@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-dotenv
+sqlalchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+python-multipart
+pymupdf
+sentence-transformers
+chromadb
+numpy
+pandas
+pytest
+httpx
