@@ -108,7 +108,7 @@
     "top_k": 5
   },
   {
-    "query": "What customer billing details should we collect for a refund review?",
+    "query": "What minimum customer information should agents collect for a refund request, and what sensitive data should they never ask for?",
     "expected_doc": "Refund Policy",
     "expected_section": "Required Customer Information",
     "top_k": 5

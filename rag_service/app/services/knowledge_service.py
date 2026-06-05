@@ -21,6 +21,7 @@ from app.schemas.knowledge import (
 )
 from app.services.embedding_service import EmbeddingService
 from app.services.pdf_extractor import extract_pdf_to_markdown
+from app.services.reranker_service import RerankerService
 from app.services.text_processing import SUPPORTED_EXTENSIONS, chunk_markdown, extract_text
 from app.services.vector_store import VectorStore
 
@@ -30,9 +31,11 @@ class KnowledgeService:
         self,
         embedding_service: EmbeddingService | None = None,
         vector_store: VectorStore | None = None,
+        reranker_service: RerankerService | None = None,
     ) -> None:
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_store = vector_store or VectorStore()
+        self.reranker_service = reranker_service or RerankerService()
 
     def upload_and_index(
         self,
@@ -133,11 +136,12 @@ class KnowledgeService:
         allowed_access_levels: list[str] | None = None,
     ) -> SearchResponse:
         top_k = request.top_k or settings.top_k
+        candidate_k = self._candidate_count(top_k)
         query_embedding = self.embedding_service.embed_query(request.query)
         filters = self._safe_search_filters(request.filters, allowed_access_levels)
         matches = self.vector_store.query(
             query_embedding=query_embedding,
-            top_k=top_k,
+            top_k=candidate_k,
             filters=filters,
         )
 
@@ -149,13 +153,19 @@ class KnowledgeService:
             ).all()
         } if chunk_ids else {}
 
-        results: list[SearchResult] = []
+        candidates: list[tuple[dict[str, Any], KnowledgeChunk]] = []
         for match in matches:
             chunk = chunks_by_id.get(match["chunk_id"])
             if not chunk:
                 continue
             if allowed_access_levels is not None and chunk.access_level not in allowed_access_levels:
                 continue
+            candidates.append((match, chunk))
+
+        candidates = self._rerank_candidates(request.query, candidates)
+
+        results: list[SearchResult] = []
+        for match, chunk in candidates[:top_k]:
             doc = chunk.document
             citation = self._citation(doc.title, chunk.section_title)
             results.append(
@@ -375,6 +385,40 @@ class KnowledgeService:
         if allowed_access_levels is not None:
             safe_filters["access_level"] = allowed_access_levels or ["__no_access__"]
         return safe_filters or None
+
+    @staticmethod
+    def _candidate_count(top_k: int) -> int:
+        if not settings.reranking_enabled:
+            return top_k
+        multiplier = max(settings.rerank_candidate_multiplier, 1)
+        max_candidates = max(settings.rerank_max_candidates, top_k)
+        return min(top_k * multiplier, max_candidates)
+
+    def _rerank_candidates(
+        self,
+        query: str,
+        candidates: list[tuple[dict[str, Any], KnowledgeChunk]],
+    ) -> list[tuple[dict[str, Any], KnowledgeChunk]]:
+        if not settings.reranking_enabled or len(candidates) <= 1:
+            return candidates
+
+        try:
+            scores = self.reranker_service.score(
+                query,
+                [chunk.chunk_text for _, chunk in candidates],
+            )
+        except Exception:
+            return candidates
+
+        if len(scores) != len(candidates):
+            return candidates
+
+        reranked = [
+            (score, index, match, chunk)
+            for index, ((match, chunk), score) in enumerate(zip(candidates, scores, strict=True))
+        ]
+        reranked.sort(key=lambda item: item[0], reverse=True)
+        return [(match, chunk) for _, _, match, chunk in reranked]
 
     @staticmethod
     def _safe_original_filename(file_name: str) -> str:

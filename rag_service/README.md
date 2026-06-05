@@ -117,6 +117,17 @@ MAX_UPLOAD_SIZE_BYTES=10485760
 
 `MAX_UPLOAD_SIZE_BYTES` defaults to 10 MB. Supported upload extensions are `.md`, `.markdown`, `.txt`, and `.pdf`.
 
+Reranking is optional and disabled by default:
+
+```env
+RERANKING_ENABLED=false
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+RERANK_CANDIDATE_MULTIPLIER=5
+RERANK_MAX_CANDIDATES=25
+```
+
+When enabled, search retrieves a larger Chroma candidate pool, scores each `(query, chunk)` pair with the reranker, and returns the best `top_k` results. For example, `top_k=5` with multiplier `5` reranks up to 25 candidates. If the reranker fails, search falls back to the original vector order.
+
 ## Docker Compose
 
 Create `.env` from `.env.example`, change `INTERNAL_API_KEY`, then run:

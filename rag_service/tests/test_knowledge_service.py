@@ -75,6 +75,77 @@ class FailingEmbeddingService:
         raise RuntimeError("embedding service unavailable")
 
 
+class OrderedVectorStore:
+    def __init__(self, chunk_ids: list[str]) -> None:
+        self.chunk_ids = chunk_ids
+        self.requested_top_k: int | None = None
+
+    def query(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        self.requested_top_k = top_k
+        return [
+            {
+                "chunk_id": chunk_id,
+                "text": "",
+                "metadata": {},
+                "distance": float(index),
+                "score": 1.0 / (1.0 + index),
+            }
+            for index, chunk_id in enumerate(self.chunk_ids[:top_k])
+        ]
+
+
+class KeywordRerankerService:
+    def score(self, query: str, texts: list[str]) -> list[float]:
+        return [10.0 if "best answer" in text.lower() else 1.0 for text in texts]
+
+
+class FailingRerankerService:
+    def score(self, query: str, texts: list[str]) -> list[float]:
+        raise RuntimeError("reranker unavailable")
+
+
+def add_search_doc(db: Any) -> list[str]:
+    doc = KnowledgeDoc(
+        doc_id="doc_search",
+        title="Search Test Doc",
+        source_type="policy",
+        file_name="search.md",
+        file_path="search.md",
+        indexing_status="indexed",
+    )
+    chunks = [
+        KnowledgeChunk(
+            chunk_id="chunk_vector_first",
+            doc_id=doc.doc_id,
+            chunk_text="This is a plausible but weaker answer.",
+            section_title="Vector First",
+            category="billing",
+            language="en",
+            access_level="support",
+            chunk_index=0,
+        ),
+        KnowledgeChunk(
+            chunk_id="chunk_rerank_first",
+            doc_id=doc.doc_id,
+            chunk_text="This is the best answer after reranking.",
+            section_title="Rerank First",
+            category="billing",
+            language="en",
+            access_level="support",
+            chunk_index=1,
+        ),
+    ]
+    db.add(doc)
+    db.add_all(chunks)
+    db.commit()
+    return [chunk.chunk_id for chunk in chunks]
+
+
 def test_upload_search_and_log_flow() -> None:
     temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
     settings.upload_dir = str(temp_root / "uploads")
@@ -132,6 +203,80 @@ Approved refunds are submitted within 2 business days.
     finally:
         db.close()
         shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_search_keeps_vector_order_when_reranking_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "reranking_enabled", False)
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        chunk_ids = add_search_doc(db)
+        vector_store = OrderedVectorStore(chunk_ids)
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=vector_store,
+            reranker_service=KeywordRerankerService(),
+        )
+
+        response = service.search(db=db, request=SearchRequest(query="which answer", top_k=1))
+
+        assert vector_store.requested_top_k == 1
+        assert response.results[0].section == "Vector First"
+    finally:
+        db.close()
+
+
+def test_search_reranks_larger_candidate_pool(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "reranking_enabled", True)
+    monkeypatch.setattr(settings, "rerank_candidate_multiplier", 5)
+    monkeypatch.setattr(settings, "rerank_max_candidates", 25)
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        chunk_ids = add_search_doc(db)
+        vector_store = OrderedVectorStore(chunk_ids)
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=vector_store,
+            reranker_service=KeywordRerankerService(),
+        )
+
+        response = service.search(db=db, request=SearchRequest(query="which answer", top_k=1))
+
+        assert vector_store.requested_top_k == 5
+        assert response.results[0].section == "Rerank First"
+    finally:
+        db.close()
+
+
+def test_search_falls_back_to_vector_order_when_reranker_fails(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "reranking_enabled", True)
+    monkeypatch.setattr(settings, "rerank_candidate_multiplier", 5)
+    monkeypatch.setattr(settings, "rerank_max_candidates", 25)
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        chunk_ids = add_search_doc(db)
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=OrderedVectorStore(chunk_ids),
+            reranker_service=FailingRerankerService(),
+        )
+
+        response = service.search(db=db, request=SearchRequest(query="which answer", top_k=1))
+
+        assert response.results[0].section == "Vector First"
+    finally:
+        db.close()
 
 
 def test_upload_rejects_invalid_file_type(monkeypatch) -> None:

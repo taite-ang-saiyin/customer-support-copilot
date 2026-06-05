@@ -128,6 +128,8 @@ curl -X POST http://localhost:8000/knowledge/search \
 
 The server enforces `INTERNAL_ALLOWED_ACCESS_LEVELS` during search. Client-provided `access_level` filters are ignored and replaced by the server-side allowed levels.
 
+If `RERANKING_ENABLED=true`, the service retrieves a larger vector candidate set, reranks the candidate chunks with `RERANKER_MODEL`, and returns the best `top_k` results. If reranking fails, the response falls back to vector-search order.
+
 ### Example Response
 
 ```json

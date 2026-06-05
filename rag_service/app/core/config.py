@@ -25,6 +25,13 @@ class Settings(BaseSettings):
         alias="INTERNAL_ALLOWED_ACCESS_LEVELS",
     )
     max_upload_size_bytes: int = Field(default=10 * 1024 * 1024, alias="MAX_UPLOAD_SIZE_BYTES")
+    reranking_enabled: bool = Field(default=False, alias="RERANKING_ENABLED")
+    reranker_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        alias="RERANKER_MODEL",
+    )
+    rerank_candidate_multiplier: int = Field(default=5, alias="RERANK_CANDIDATE_MULTIPLIER")
+    rerank_max_candidates: int = Field(default=25, alias="RERANK_MAX_CANDIDATES")
 
     @property
     def allowed_access_levels(self) -> list[str]:
