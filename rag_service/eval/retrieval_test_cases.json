@@ -88,5 +88,251 @@
     "expected_doc": "Privacy Policy Summary",
     "expected_section": "Security And Privacy Escalation",
     "top_k": 3
+  },
+  {
+    "query": "The customer has two settled card charges for the same invoice period",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Duplicate Charges",
+    "top_k": 5
+  },
+  {
+    "query": "Can we refund unused time after a monthly renewal?",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Non-Refundable Cases",
+    "top_k": 5
+  },
+  {
+    "query": "How long does a card refund usually take to appear?",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Refund Processing Time",
+    "top_k": 5
+  },
+  {
+    "query": "What customer billing details should we collect for a refund review?",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Required Customer Information",
+    "top_k": 5
+  },
+  {
+    "query": "The customer asks us to guarantee the refund before checking invoices",
+    "expected_doc": "Refund Policy",
+    "expected_section": "Agent Language",
+    "top_k": 5
+  },
+  {
+    "query": "CD-PAY-METHOD-409 appears when updating the card",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Payment Method Update",
+    "top_k": 5
+  },
+  {
+    "query": "Customer downgraded but still sees the old Business plan charge",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Plan Downgrade",
+    "top_k": 5
+  },
+  {
+    "query": "Does an annual plan send renewal reminders?",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Subscription Renewal",
+    "top_k": 5
+  },
+  {
+    "query": "A workspace owner wants to move from Pro to Business today",
+    "expected_doc": "Billing FAQ",
+    "expected_section": "Plan Upgrade",
+    "top_k": 5
+  },
+  {
+    "query": "The reset email is missing after CD-AUTH-401",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "Incorrect Password",
+    "top_k": 5
+  },
+  {
+    "query": "User sees a blank screen after login and clearing cache might help",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "Browser and Cache Issues",
+    "top_k": 5
+  },
+  {
+    "query": "What information should support collect for a login problem?",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "Required Information From Customer",
+    "top_k": 5
+  },
+  {
+    "query": "Multiple people cannot log in and one code is CD-AUTH-SUSPICIOUS",
+    "expected_doc": "Login Troubleshooting",
+    "expected_section": "When To Escalate",
+    "top_k": 5
+  },
+  {
+    "query": "The user lost access to their old company email address",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Lost Access To Email",
+    "top_k": 5
+  },
+  {
+    "query": "What evidence proves authority over a workspace owner account?",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Admin Account Recovery",
+    "top_k": 5
+  },
+  {
+    "query": "SEC-ACCT-RECOVERY verification case",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Identity Verification Steps",
+    "top_k": 5
+  },
+  {
+    "query": "All enterprise admins are locked out after SSO misconfiguration",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Enterprise Admin Recovery",
+    "top_k": 5
+  },
+  {
+    "query": "Requester wants support to disable MFA without verification",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Security Restrictions",
+    "top_k": 5
+  },
+  {
+    "query": "There is a dispute between former and current employees over ownership",
+    "expected_doc": "Account Recovery Policy",
+    "expected_section": "Escalation To Security Team",
+    "top_k": 5
+  },
+  {
+    "query": "What are the differences between Free, Pro, Business, and Enterprise support?",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Support Levels",
+    "top_k": 5
+  },
+  {
+    "query": "Ticket intake is down and customers cannot send replies",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Production-Impacting Issues",
+    "top_k": 5
+  },
+  {
+    "query": "Use CD-INCIDENT-SUSPECTED when many customers report the same failure",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Outage Handling",
+    "top_k": 5
+  },
+  {
+    "query": "The designated support contact asks to escalate an SSO issue",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Enterprise Escalation",
+    "top_k": 5
+  },
+  {
+    "query": "Can we promise service credits for an enterprise outage?",
+    "expected_doc": "Enterprise SLA Policy",
+    "expected_section": "Service Credits",
+    "top_k": 5
+  },
+  {
+    "query": "Known issue CD-KI-2026-014",
+    "expected_doc": "Known Issues",
+    "expected_section": "Delayed Email Notifications",
+    "top_k": 5
+  },
+  {
+    "query": "CD-SSO-TIMEOUT after identity provider redirect",
+    "expected_doc": "Known Issues",
+    "expected_section": "SSO Login Intermittent Failure",
+    "top_k": 5
+  },
+  {
+    "query": "CD-ANALYTICS-504 with scheduled report preview",
+    "expected_doc": "Known Issues",
+    "expected_section": "Analytics Dashboard Slow Loading",
+    "top_k": 5
+  },
+  {
+    "query": "Live chat widget color changes are not saving",
+    "expected_doc": "Known Issues",
+    "expected_section": "Live Chat Widget Theme Not Saving",
+    "top_k": 5
+  },
+  {
+    "query": "Automation rules were delayed and queue workers were scaled",
+    "expected_doc": "Known Issues",
+    "expected_section": "Automation Rule Delay",
+    "top_k": 5
+  },
+  {
+    "query": "What data does CloudDesk store about users and tickets?",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "Customer Data CloudDesk Stores",
+    "top_k": 5
+  },
+  {
+    "query": "How long are deleted tickets and audit logs retained?",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "Data Retention Summary",
+    "top_k": 5
+  },
+  {
+    "query": "Admin wants to export tickets and customer profiles",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "Export Requests",
+    "top_k": 5
+  },
+  {
+    "query": "Should agents paste phone numbers and full message content into internal notes?",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "PII Handling",
+    "top_k": 5
+  },
+  {
+    "query": "Can support reveal whether a specific end user exists in the workspace?",
+    "expected_doc": "Privacy Policy Summary",
+    "expected_section": "What Agents Should Not Disclose",
+    "top_k": 5
+  },
+  {
+    "query": "Ticket CD-TKT-2026-1001 duplicate invoice refund",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1001",
+    "top_k": 5
+  },
+  {
+    "query": "A customer could not renew because the card expired",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1002",
+    "top_k": 5
+  },
+  {
+    "query": "Okta group mapping was renamed and SSO broke for multiple users",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1004",
+    "top_k": 5
+  },
+  {
+    "query": "Former billing admin left and no one can update payment details",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1008",
+    "top_k": 5
+  },
+  {
+    "query": "Former end user profile and ticket history deletion request",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1009",
+    "top_k": 5
+  },
+  {
+    "query": "Downgrade job failed because enterprise add-on remained active",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1012",
+    "top_k": 5
+  },
+  {
+    "query": "All admins locked out after SSO certificate rotation",
+    "expected_doc": "Past Resolved Tickets",
+    "expected_section": "Ticket CD-TKT-2026-1015",
+    "top_k": 5
   }
 ]

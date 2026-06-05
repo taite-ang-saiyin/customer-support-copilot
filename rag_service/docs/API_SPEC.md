@@ -12,6 +12,8 @@ X-API-Key: your-internal-key
 
 Missing or invalid API keys return `401`.
 
+Set `API_KEY_AUTH_ENABLED=false` only for local debugging if you need to temporarily disable this check.
+
 ## POST /knowledge/upload
 
 ### Purpose

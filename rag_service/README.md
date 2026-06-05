@@ -111,6 +111,8 @@ INTERNAL_ALLOWED_ACCESS_LEVELS=support,public
 MAX_UPLOAD_SIZE_BYTES=10485760
 ```
 
+`API_KEY_AUTH_ENABLED=true` protects all `/knowledge` endpoints with `X-API-Key`. Set it to `false` only for local debugging or trusted temporary demos, then restart the service.
+
 `INTERNAL_ALLOWED_ACCESS_LEVELS` is enforced by the server during search. Clients may send normal filters such as `category`, but the API does not trust client-provided `access_level` filters.
 
 `MAX_UPLOAD_SIZE_BYTES` defaults to 10 MB. Supported upload extensions are `.md`, `.markdown`, `.txt`, and `.pdf`.

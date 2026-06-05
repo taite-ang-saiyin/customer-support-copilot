@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     app_name: str = Field(default="AI Customer Support Copilot RAG Service", alias="APP_NAME")
     env: str = Field(default="development", alias="ENV")
     chroma_collection: str = "support_knowledge"
+    api_key_auth_enabled: bool = Field(default=True, alias="API_KEY_AUTH_ENABLED")
     internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
     internal_allowed_access_levels: str = Field(
         default="support,public",

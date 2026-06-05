@@ -17,6 +17,8 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> str:
+    if not settings.api_key_auth_enabled:
+        return ""
     if not settings.internal_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

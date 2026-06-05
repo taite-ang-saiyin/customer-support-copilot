@@ -42,6 +42,7 @@ def build_client(service: FakeApiService) -> TestClient:
 
 
 def test_knowledge_endpoints_reject_missing_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", True)
     monkeypatch.setattr(settings, "internal_api_key", "secret")
     client = build_client(FakeApiService())
 
@@ -51,6 +52,7 @@ def test_knowledge_endpoints_reject_missing_api_key(monkeypatch) -> None:
 
 
 def test_knowledge_endpoints_reject_invalid_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", True)
     monkeypatch.setattr(settings, "internal_api_key", "secret")
     client = build_client(FakeApiService())
 
@@ -60,6 +62,7 @@ def test_knowledge_endpoints_reject_invalid_api_key(monkeypatch) -> None:
 
 
 def test_knowledge_endpoints_accept_valid_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", True)
     monkeypatch.setattr(settings, "internal_api_key", "secret")
     client = build_client(FakeApiService())
 
@@ -69,7 +72,19 @@ def test_knowledge_endpoints_accept_valid_api_key(monkeypatch) -> None:
     assert response.json() == {"items": [], "total": 0}
 
 
+def test_knowledge_endpoints_allow_requests_when_api_key_auth_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", False)
+    monkeypatch.setattr(settings, "internal_api_key", None)
+    client = build_client(FakeApiService())
+
+    response = client.get("/knowledge/docs")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0}
+
+
 def test_search_uses_server_side_allowed_access_levels(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", True)
     monkeypatch.setattr(settings, "internal_api_key", "secret")
     monkeypatch.setattr(settings, "internal_allowed_access_levels", "support,public")
     service = FakeApiService()
