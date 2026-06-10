@@ -1,0 +1,17 @@
+{
+  "timestamp": null,
+  "metrics": {
+    "category_accuracy": null,
+    "priority_accuracy": null,
+    "exact_match_accuracy": null,
+    "average_confidence": null,
+    "average_confidence_breakdown": {
+      "category": null,
+      "priority": null,
+      "sentiment": null,
+      "entity": null
+    }
+  },
+  "results": [],
+  "note": "Run python evaluation_report.py while the API server is running to generate category, priority, and sentiment results. Intent is not used."
+}
