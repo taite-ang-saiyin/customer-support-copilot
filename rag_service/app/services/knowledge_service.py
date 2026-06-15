@@ -239,9 +239,12 @@ class KnowledgeService:
         if doc is None:
             return None
         deleted_chunks = len(doc.chunks)
+        file_paths = self._document_file_paths(doc)
         self.vector_store.delete_document(doc_id)
         db.delete(doc)
         db.commit()
+        for file_path in file_paths:
+            file_path.unlink(missing_ok=True)
         return deleted_chunks
 
     def _index_document(
@@ -338,6 +341,20 @@ class KnowledgeService:
         stem = Path(file_name).stem
         return Path(settings.upload_dir) / "processed" / f"{stem}.cleaned.md"
 
+    def _document_file_paths(self, doc: KnowledgeDoc) -> list[Path]:
+        file_paths = [self._safe_upload_path(Path(doc.file_path))]
+        if Path(doc.file_name).suffix.lower() == ".pdf":
+            file_paths.append(self._safe_upload_path(self._processed_markdown_path(doc.file_name)))
+        return file_paths
+
+    @staticmethod
+    def _safe_upload_path(file_path: Path) -> Path:
+        upload_root = Path(settings.upload_dir).resolve()
+        resolved_path = file_path.resolve()
+        if not resolved_path.is_relative_to(upload_root):
+            raise ValueError("Refusing to delete a file outside the upload directory")
+        return resolved_path
+
     def _save_upload(self, file: UploadFile) -> tuple[str, str]:
         original_name = self._safe_original_filename(file.filename or "knowledge.txt")
         extension = Path(original_name).suffix.lower()
@@ -346,11 +363,21 @@ class KnowledgeService:
 
         upload_dir = Path(settings.upload_dir)
         upload_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = f"{uuid.uuid4().hex}_{original_name}"
-        file_path = upload_dir / safe_name
+        stem = Path(original_name).stem
+        suffix = Path(original_name).suffix
+        counter = 1
+
+        while True:
+            stored_name = original_name if counter == 1 else f"{stem}_{counter}{suffix}"
+            file_path = upload_dir / stored_name
+            try:
+                output = file_path.open("xb")
+                break
+            except FileExistsError:
+                counter += 1
 
         total_size = 0
-        with file_path.open("wb") as output:
+        with output:
             while chunk := file.file.read(1024 * 1024):
                 total_size += len(chunk)
                 if total_size > settings.max_upload_size_bytes:
@@ -362,7 +389,7 @@ class KnowledgeService:
                     )
                 output.write(chunk)
 
-        return os.fspath(file_path), original_name
+        return os.fspath(file_path), stored_name
 
     def _delete_vector_chunks(self, chunk_ids: list[str]) -> None:
         delete_chunks = getattr(self.vector_store, "delete_chunks", None)

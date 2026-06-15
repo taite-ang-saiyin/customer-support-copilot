@@ -117,6 +117,8 @@ MAX_UPLOAD_SIZE_BYTES=10485760
 
 `MAX_UPLOAD_SIZE_BYTES` defaults to 10 MB. Supported upload extensions are `.md`, `.markdown`, `.txt`, and `.pdf`.
 
+Uploaded files keep a sanitized readable filename. If the name already exists, the service adds a numeric suffix such as `known_issues_2.md` instead of overwriting it.
+
 Reranking is optional and disabled by default:
 
 ```env

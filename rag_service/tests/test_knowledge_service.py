@@ -5,6 +5,7 @@ from typing import Any
 import uuid
 
 from fastapi import UploadFile
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
@@ -13,6 +14,11 @@ from app.db.database import Base
 from app.db.models import KnowledgeChunk, KnowledgeDoc, RetrievalLog
 from app.schemas.knowledge import SearchRequest
 from app.services.knowledge_service import KnowledgeService
+
+
+@pytest.fixture(autouse=True)
+def disable_reranking_by_default(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "reranking_enabled", False)
 
 
 class FakeEmbeddingService:
@@ -296,6 +302,127 @@ def test_upload_rejects_invalid_file_type(monkeypatch) -> None:
         else:
             raise AssertionError("Expected invalid file type to be rejected")
     finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_upload_keeps_readable_filename(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    monkeypatch.setattr(settings, "upload_dir", str(temp_root / "uploads"))
+    service = KnowledgeService(
+        embedding_service=FakeEmbeddingService(),
+        vector_store=FakeVectorStore(),
+    )
+    file = UploadFile(filename="known_issues.md", file=BytesIO(b"# Known Issues"))
+
+    try:
+        file_path, stored_name = service._save_upload(file)
+
+        assert stored_name == "known_issues.md"
+        assert Path(file_path).name == "known_issues.md"
+        assert Path(file_path).read_bytes() == b"# Known Issues"
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_duplicate_upload_uses_readable_numeric_suffix(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    monkeypatch.setattr(settings, "upload_dir", str(temp_root / "uploads"))
+    service = KnowledgeService(
+        embedding_service=FakeEmbeddingService(),
+        vector_store=FakeVectorStore(),
+    )
+
+    try:
+        first_path, first_name = service._save_upload(
+            UploadFile(filename="known_issues.md", file=BytesIO(b"first"))
+        )
+        second_path, second_name = service._save_upload(
+            UploadFile(filename="known_issues.md", file=BytesIO(b"second"))
+        )
+
+        assert first_name == "known_issues.md"
+        assert second_name == "known_issues_2.md"
+        assert Path(first_path).read_bytes() == b"first"
+        assert Path(second_path).read_bytes() == b"second"
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_delete_document_removes_uploaded_file(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    upload_dir = temp_root / "uploads"
+    upload_dir.mkdir(parents=True)
+    file_path = upload_dir / "known_issues.md"
+    file_path.write_text("# Known Issues", encoding="utf-8")
+    monkeypatch.setattr(settings, "upload_dir", str(upload_dir))
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        doc = KnowledgeDoc(
+            doc_id="doc_delete_markdown",
+            title="Known Issues",
+            source_type="known_issue",
+            file_name=file_path.name,
+            file_path=str(file_path),
+            indexing_status="indexed",
+        )
+        db.add(doc)
+        db.commit()
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        deleted_chunks = service.delete_document(db, doc.doc_id)
+
+        assert deleted_chunks == 0
+        assert not file_path.exists()
+        assert db.get(KnowledgeDoc, doc.doc_id) is None
+    finally:
+        db.close()
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_delete_pdf_removes_source_and_processed_markdown(monkeypatch) -> None:
+    temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
+    upload_dir = temp_root / "uploads"
+    processed_dir = upload_dir / "processed"
+    processed_dir.mkdir(parents=True)
+    file_path = upload_dir / "refund_policy.pdf"
+    processed_path = processed_dir / "refund_policy.cleaned.md"
+    file_path.write_bytes(b"%PDF-1.4")
+    processed_path.write_text("# Refund Policy", encoding="utf-8")
+    monkeypatch.setattr(settings, "upload_dir", str(upload_dir))
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        doc = KnowledgeDoc(
+            doc_id="doc_delete_pdf",
+            title="Refund Policy",
+            source_type="policy",
+            file_name=file_path.name,
+            file_path=str(file_path),
+            indexing_status="indexed",
+        )
+        db.add(doc)
+        db.commit()
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        service.delete_document(db, doc.doc_id)
+
+        assert not file_path.exists()
+        assert not processed_path.exists()
+    finally:
+        db.close()
         shutil.rmtree(temp_root, ignore_errors=True)
 
 

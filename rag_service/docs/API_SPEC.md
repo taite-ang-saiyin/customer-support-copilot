@@ -262,7 +262,7 @@ curl http://localhost:8000/knowledge/docs/doc_001/status \
 
 ### Purpose
 
-Delete a document record and remove related chunks and vector entries.
+Delete a document record, related chunks, vector entries, the uploaded source file, and any generated cleaned Markdown artifact.
 
 ### Parameters
 
