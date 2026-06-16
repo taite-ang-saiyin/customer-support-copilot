@@ -1,0 +1,12 @@
+[
+  {
+    "case_id": "case_001",
+    "question": "How can a customer track a submitted ticket?",
+    "ground_truth": "The customer can track the submitted ticket using the generated tracking code."
+  },
+  {
+    "case_id": "case_002",
+    "question": "What should support do for a duplicate payment issue?",
+    "ground_truth": "Support should verify the payment and follow the duplicate charge refund process."
+  }
+]

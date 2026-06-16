@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from sqlalchemy import inspect, text
 
+from app.api.evaluations import router as evaluations_router
 from app.api.knowledge import router as knowledge_router
 from app.core.config import settings
 from app.db.database import Base, engine
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": settings.app_name}
 
     app.include_router(knowledge_router)
+    app.include_router(evaluations_router)
     return app
 
 

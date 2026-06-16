@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
@@ -16,9 +17,11 @@ from app.schemas.knowledge import (
     SearchResponse,
 )
 from app.services.knowledge_service import KnowledgeService
+from app.services.ragas_eval_service import start_ragas_evaluation_after_upload
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"], dependencies=[Depends(require_api_key)])
 _knowledge_service: KnowledgeService | None = None
+logger = logging.getLogger(__name__)
 
 
 def get_knowledge_service() -> KnowledgeService:
@@ -166,5 +169,9 @@ def _index_uploaded_document(
             access_level=access_level,
             language=language,
         )
+        try:
+            start_ragas_evaluation_after_upload(uploaded_document_id=doc_id)
+        except Exception:
+            logger.exception("Could not start automatic Ragas evaluation for document %s", doc_id)
     finally:
         db.close()

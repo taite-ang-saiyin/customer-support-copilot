@@ -1,0 +1,52 @@
+[
+  {
+    "case_id": "case_001",
+    "question": "What information should support collect before reviewing a duplicate charge refund?",
+    "ground_truth": "Support should collect the workspace URL or workspace ID, billing email, invoice numbers, charge dates, amount and currency, and last four digits of the card or payment method nickname. They should not request a full card number, CVV, banking password, government ID, or customer account password."
+  },
+  {
+    "case_id": "case_002",
+    "question": "A customer says they were billed twice, but one charge may only be pending. What should the agent explain?",
+    "ground_truth": "The agent should confirm whether both charges are settled or whether one is only a pending authorization. Pending authorizations are not completed charges and usually expire automatically. If a true duplicate charge is confirmed, the agent should follow the refund policy for duplicate charges."
+  },
+  {
+    "case_id": "case_003",
+    "question": "When should an account recovery request be escalated to the Security Team?",
+    "ground_truth": "Escalate account recovery when the requester cannot access the billing email or company domain, there is a dispute between former and current employees, suspected account takeover is reported, the request involves deleting audit logs or ownership changes after termination, or the workspace contains regulated data or Enterprise security addendum terms. Use escalation code CD-SEC-RECOVERY-REVIEW."
+  },
+  {
+    "case_id": "case_004",
+    "question": "What should support do if all Enterprise admins are locked out because of SSO misconfiguration?",
+    "ground_truth": "Enterprise admin recovery must involve the Customer Success Manager or Enterprise Support lead. If all admins are locked out because of SSO misconfiguration, support should escalate with priority High or Urgent depending on production impact and use escalation reason ENT-ADMIN-LOCKOUT."
+  },
+  {
+    "case_id": "case_005",
+    "question": "Can an agent reveal whether a specific end user exists in a workspace?",
+    "ground_truth": "Agents must not disclose whether a specific end user exists in a workspace unless the requester is verified and authorized. They should use approved summaries and escalate when unsure."
+  },
+  {
+    "case_id": "case_006",
+    "question": "What details are required for a privacy deletion request?",
+    "ground_truth": "For a privacy deletion request, collect the workspace URL, requester email and role, data subject email if deleting data for a specific person, deletion scope such as profile or tickets or chat transcripts or full workspace closure, and any legal or contractual deadline. Escalate with code PRIV-DELETE-REQUEST."
+  },
+  {
+    "case_id": "case_007",
+    "question": "An Enterprise customer says ticket intake is down and customers cannot send replies. What priority and escalation guidance applies?",
+    "ground_truth": "A production-impacting issue that prevents ticket intake, customer replies, live chat, SSO access for all users, or other business-critical support operations is Urgent for Enterprise, with a typical first response target of 30 minutes. Agents should check the incident board and known issues list, and if multiple customers report the same failure within 15 minutes, escalate to Incident Command using tag CD-INCIDENT-SUSPECTED."
+  },
+  {
+    "case_id": "case_008",
+    "question": "What is known issue CD-KI-2026-014 and what workaround should agents suggest?",
+    "ground_truth": "Known issue CD-KI-2026-014 is Delayed Email Notifications. Some users may receive ticket assignment and mention notifications 10 to 25 minutes late, but ticket creation and agent replies are not delayed. Agents should suggest using the in-app notification center or team inbox filters until the delay is resolved."
+  },
+  {
+    "case_id": "case_009",
+    "question": "What should support collect for an SSO login failure with error CD-SSO-403?",
+    "ground_truth": "For CD-SSO-403, collect the workspace URL, user email, identity provider name such as Okta or Azure AD or Google Workspace, approximate timestamp and timezone, SAML request ID if available, and a screenshot of the CloudDesk error code. Escalate to Enterprise Support if SSO affects multiple users or an Enterprise admin cannot access the workspace."
+  },
+  {
+    "case_id": "case_010",
+    "question": "A customer cannot download an invoice and sees CD-INV-EXPORT-500. What should the agent do?",
+    "ground_truth": "The agent should ask for the invoice number and browser details, confirm the user has Billing Admin or Workspace Owner permission if the download button is missing, and escalate CD-INV-EXPORT-500 to Billing Engineering. The known issue notes that some invoice PDFs failed after tax ID updates and affected invoices were regenerated."
+  }
+]

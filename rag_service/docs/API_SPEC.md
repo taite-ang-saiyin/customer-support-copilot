@@ -284,3 +284,69 @@ curl -X DELETE http://localhost:8000/knowledge/docs/doc_001 \
   "deleted_chunks": 8
 }
 ```
+
+## Ragas Evaluations
+
+All evaluation endpoints require `X-API-Key`.
+
+### POST /evaluations/ragas/run
+
+Starts a manual Ragas evaluation in a FastAPI background task.
+
+```json
+{
+  "started_by_agent_id": "agent_001",
+  "started_by_agent_name": "Support Manager",
+  "notes": "Manual run from dashboard"
+}
+```
+
+Response:
+
+```json
+{
+  "message": "Evaluation started",
+  "run_id": "eval_20260615_120000_ab12cd34"
+}
+```
+
+### GET /evaluations/ragas/runs
+
+Returns recent `evaluation_runs` rows where `module="rag_service"`.
+
+### GET /evaluations/ragas/runs/{run_id}
+
+Returns one evaluation run and its status metadata.
+
+### GET /evaluations/ragas/runs/{run_id}/metrics
+
+Returns the run's average `faithfulness`, `answer_relevancy`, `context_precision`, and `context_recall` rows.
+
+### GET /evaluations/ragas/runs/{run_id}/errors
+
+Returns failed evaluation cases stored in `error_analysis`.
+
+### PATCH /evaluations/ragas/errors/{error_id}/resolve
+
+```json
+{
+  "resolution_notes": "Updated prompt to avoid unsupported answer."
+}
+```
+
+Marks the error resolved and records the current timestamp.
+
+### POST /evaluations/ragas/errors/{error_id}/feedback
+
+```json
+{
+  "action": "needs_fix",
+  "rating": 2,
+  "feedback_note": "The generated answer mentions email but tracking is done by code.",
+  "edited_text": "Customer can track the ticket using the generated tracking code.",
+  "agent_id": "agent_001",
+  "agent_name": "Support Manager"
+}
+```
+
+Creates an `agent_feedback` row with `object_type="error_analysis"`.

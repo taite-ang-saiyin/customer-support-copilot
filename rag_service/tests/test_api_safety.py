@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_db
+from app.api import knowledge as knowledge_api
 from app.api.knowledge import get_knowledge_service, router
 from app.core.config import settings
 from app.schemas.knowledge import DocumentListResponse, SearchRequest, SearchResponse
@@ -101,3 +102,56 @@ def test_search_uses_server_side_allowed_access_levels(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert service.allowed_access_levels == ["support", "public"]
+
+
+def test_upload_background_task_triggers_evaluation_after_success(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeDb:
+        def close(self) -> None:
+            calls.append("db_closed")
+
+    class FakeKnowledgeService:
+        def index_document_by_id(self, **kwargs: Any) -> None:
+            calls.append("indexed")
+
+    monkeypatch.setattr(knowledge_api, "SessionLocal", FakeDb)
+    monkeypatch.setattr(knowledge_api, "get_knowledge_service", lambda: FakeKnowledgeService())
+    monkeypatch.setattr(
+        knowledge_api,
+        "start_ragas_evaluation_after_upload",
+        lambda uploaded_document_id: calls.append(f"evaluated:{uploaded_document_id}"),
+    )
+
+    knowledge_api._index_uploaded_document("doc_001", "billing", "support", "en")
+
+    assert calls == ["indexed", "evaluated:doc_001", "db_closed"]
+
+
+def test_upload_background_task_skips_evaluation_after_index_failure(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeDb:
+        def close(self) -> None:
+            calls.append("db_closed")
+
+    class FailingKnowledgeService:
+        def index_document_by_id(self, **kwargs: Any) -> None:
+            raise RuntimeError("index failed")
+
+    monkeypatch.setattr(knowledge_api, "SessionLocal", FakeDb)
+    monkeypatch.setattr(knowledge_api, "get_knowledge_service", lambda: FailingKnowledgeService())
+    monkeypatch.setattr(
+        knowledge_api,
+        "start_ragas_evaluation_after_upload",
+        lambda uploaded_document_id: calls.append("evaluated"),
+    )
+
+    try:
+        knowledge_api._index_uploaded_document("doc_001", "billing", "support", "en")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Expected indexing failure")
+
+    assert calls == ["db_closed"]

@@ -32,6 +32,39 @@ class Settings(BaseSettings):
     )
     rerank_candidate_multiplier: int = Field(default=5, alias="RERANK_CANDIDATE_MULTIPLIER")
     rerank_max_candidates: int = Field(default=25, alias="RERANK_MAX_CANDIDATES")
+    ragas_dataset_path: str = Field(
+        default="./evals/datasets/support_eval_v1.json",
+        alias="RAGAS_DATASET_PATH",
+    )
+    ragas_auto_eval_enabled: bool = Field(default=True, alias="RAGAS_AUTO_EVAL_ENABLED")
+    ragas_evaluator_model: str | None = Field(default=None, alias="RAGAS_EVALUATOR_MODEL")
+    ragas_evaluator_provider: str | None = Field(
+        default=None,
+        alias="RAGAS_EVALUATOR_PROVIDER",
+    )
+    ragas_evaluator_api_key: str | None = Field(
+        default=None,
+        alias="RAGAS_EVALUATOR_API_KEY",
+    )
+    ragas_evaluator_base_url: str | None = Field(
+        default=None,
+        alias="RAGAS_EVALUATOR_BASE_URL",
+    )
+    ragas_evaluator_max_tokens: int = Field(
+        default=2048,
+        alias="RAGAS_EVALUATOR_MAX_TOKENS",
+    )
+    ragas_prompt_version: str = Field(default="rag_prompt_v1", alias="RAGAS_PROMPT_VERSION")
+    ragas_retrieval_version: str = Field(
+        default="chroma_v1",
+        alias="RAGAS_RETRIEVAL_VERSION",
+    )
+    ragas_eval_top_k: int = Field(default=5, alias="RAGAS_EVAL_TOP_K")
+    supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
+    supabase_service_role_key: str | None = Field(
+        default=None,
+        alias="SUPABASE_SERVICE_ROLE_KEY",
+    )
 
     @property
     def allowed_access_levels(self) -> list[str]:

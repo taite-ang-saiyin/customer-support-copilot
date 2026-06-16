@@ -130,6 +130,64 @@ RERANK_MAX_CANDIDATES=25
 
 When enabled, search retrieves a larger Chroma candidate pool, scores each `(query, chunk)` pair with the reranker, and returns the best `top_k` results. For example, `top_k=5` with multiplier `5` reranks up to 25 candidates. If the reranker fails, search falls back to the original vector order.
 
+## Ragas Evaluation
+
+The service supports manual and post-upload Ragas evaluation using the existing Supabase tables:
+
+- `evaluation_runs`
+- `evaluation_metrics`
+- `error_analysis`
+- `agent_feedback`
+
+Knowledge documents, chunks, and retrieval logs remain in the local PostgreSQL service. Evaluation records are sent separately to Supabase through its REST API:
+
+```env
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+The service-role key is server-side only. Never expose it to a browser or commit it.
+
+The fixed dataset is stored at `evals/datasets/support_eval_v1.json`. Because this service does not generate LLM answers, evaluation uses the first retrieved chunk as a clearly separated extractive answer and sends all retrieved chunks to Ragas as contexts.
+
+Configure an evaluator LLM through an OpenAI-compatible endpoint:
+
+```env
+RAGAS_DATASET_PATH=./evals/datasets/support_eval_v1.json
+RAGAS_AUTO_EVAL_ENABLED=true
+RAGAS_EVALUATOR_MODEL=your-evaluator-model
+RAGAS_EVALUATOR_PROVIDER=openai
+RAGAS_EVALUATOR_API_KEY=
+RAGAS_EVALUATOR_BASE_URL=http://host.docker.internal:11434/v1
+RAGAS_EVALUATOR_MAX_TOKENS=2048
+RAGAS_PROMPT_VERSION=rag_prompt_v1
+RAGAS_RETRIEVAL_VERSION=chroma_v1
+RAGAS_EVAL_TOP_K=5
+```
+
+For a hosted OpenAI-compatible provider, set its API key and omit `RAGAS_EVALUATOR_BASE_URL`. For a local compatible endpoint, set the base URL; the service supplies a non-secret placeholder API key when the client requires one.
+If a local evaluator fails with incomplete output because of a token limit, increase `RAGAS_EVALUATOR_MAX_TOKENS`.
+
+Start a manual run:
+
+```bash
+curl -X POST http://localhost:8000/evaluations/ragas/run \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: change-me-dev-key" \
+  -d "{\"started_by_agent_id\":\"agent_001\",\"started_by_agent_name\":\"Support Manager\",\"notes\":\"Manual dashboard run\"}"
+```
+
+The endpoint returns immediately with a run ID. Use:
+
+```text
+GET /evaluations/ragas/runs
+GET /evaluations/ragas/runs/{run_id}
+GET /evaluations/ragas/runs/{run_id}/metrics
+GET /evaluations/ragas/runs/{run_id}/errors
+```
+
+After a document indexes successfully, an automatic run starts when `RAGAS_AUTO_EVAL_ENABLED=true`. Missing evaluator configuration or evaluator crashes are stored as `metadata.status="error"` with `metadata.error_message`.
+
 ## Docker Compose
 
 Create `.env` from `.env.example`, change `INTERNAL_API_KEY`, then run:
