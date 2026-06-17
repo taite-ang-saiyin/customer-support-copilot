@@ -152,6 +152,40 @@ def add_search_doc(db: Any) -> list[str]:
     return [chunk.chunk_id for chunk in chunks]
 
 
+def add_help_doc(
+    db: Any,
+    doc_id: str,
+    title: str,
+    category: str,
+    access_level: str,
+    status: str = "indexed",
+    chunks: list[tuple[str, str]] | None = None,
+) -> None:
+    doc = KnowledgeDoc(
+        doc_id=doc_id,
+        title=title,
+        source_type="article",
+        file_name=f"{doc_id}.md",
+        file_path=f"{doc_id}.md",
+        indexing_status=status,
+    )
+    db.add(doc)
+    for index, (section, text) in enumerate(chunks or [("Guide", f"{title} body")]):
+        db.add(
+            KnowledgeChunk(
+                chunk_id=f"chunk_{doc_id}_{index}",
+                doc_id=doc_id,
+                chunk_text=text,
+                section_title=section,
+                category=category,
+                language="en",
+                access_level=access_level,
+                chunk_index=index,
+            )
+        )
+    db.commit()
+
+
 def test_upload_search_and_log_flow() -> None:
     temp_root = Path(".pytest_workspace") / uuid.uuid4().hex
     settings.upload_dir = str(temp_root / "uploads")
@@ -209,6 +243,197 @@ Approved refunds are submitted within 2 business days.
     finally:
         db.close()
         shutil.rmtree(temp_root, ignore_errors=True)
+
+
+def test_help_articles_include_only_public_indexed_documents() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(db, "doc_public", "Refund Help", "billing", "public")
+        add_help_doc(db, "doc_support", "Support Playbook", "billing", "support")
+        add_help_doc(db, "doc_internal", "Internal Runbook", "ops", "internal")
+        add_help_doc(db, "doc_private", "Private Notes", "ops", "private")
+        add_help_doc(db, "doc_pending", "Pending Public", "billing", "public", status="pending")
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        response = service.list_help_articles(db=db)
+
+        assert [article.id for article in response.articles] == ["doc_public"]
+        assert response.articles[0].helpfulCount == 0
+        assert response.articles[0].unhelpfulCount == 0
+    finally:
+        db.close()
+
+
+def test_help_articles_category_filter_uses_public_chunk_category() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(db, "doc_billing", "Refund Help", "billing", "public")
+        add_help_doc(db, "doc_login", "Login Help", "account", "public")
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        response = service.list_help_articles(db=db, category="account")
+
+        assert [article.id for article in response.articles] == ["doc_login"]
+        assert response.articles[0].category == "account"
+    finally:
+        db.close()
+
+
+def test_help_articles_q_filter_searches_title_category_and_chunk_text() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(
+            db,
+            "doc_refund",
+            "Refund Help",
+            "billing",
+            "public",
+            chunks=[("Refunds", "Customers can request refund review for duplicate charges.")],
+        )
+        add_help_doc(
+            db,
+            "doc_login",
+            "Login Help",
+            "account",
+            "public",
+            chunks=[("Passwords", "Reset your password from the sign-in page.")],
+        )
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        title_response = service.list_help_articles(db=db, q="refund")
+        category_response = service.list_help_articles(db=db, q="account")
+        text_response = service.list_help_articles(db=db, q="duplicate charges")
+
+        assert [article.id for article in title_response.articles] == ["doc_refund"]
+        assert [article.id for article in category_response.articles] == ["doc_login"]
+        assert [article.id for article in text_response.articles] == ["doc_refund"]
+    finally:
+        db.close()
+
+
+def test_get_help_article_returns_sections_without_duplicate_chunks() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(
+            db,
+            "doc_article",
+            "Billing Guide",
+            "billing",
+            "public",
+            chunks=[
+                ("Overview", "Billing settings are available from workspace settings."),
+                ("Steps", "Open billing, review the invoice, and choose download."),
+                ("Steps", "Open billing, review the invoice, and choose download."),
+            ],
+        )
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        article = service.get_help_article(db=db, doc_id="doc_article")
+
+        assert article is not None
+        assert article.id == "doc_article"
+        assert article.title == "Billing Guide"
+        assert article.summary == "Billing settings are available from workspace settings."
+        assert [section.title for section in article.contentSections] == ["Overview", "Steps"]
+        assert article.contentSections[1].body == "Open billing, review the invoice, and choose download."
+    finally:
+        db.close()
+
+
+def test_get_help_article_strips_front_matter_and_duplicate_markdown_headings() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(
+            db,
+            "doc_markdown_article",
+            "Account Recovery",
+            "Account Access",
+            "public",
+            chunks=[
+                (
+                    "Overview",
+                    """---
+title: Account Recovery
+category: Account Access
+access_level: public
+source_type: help_article
+summary: Learn how CloudDesk verifies account recovery requests.
+---""",
+                ),
+                ("Account Recovery", "# Account Recovery"),
+                (
+                    "Lost Access To Login Email",
+                    "## Lost Access To Login Email\n\nIf you lost access to your login email, ask another Workspace Admin for help.",
+                ),
+            ],
+        )
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        article = service.get_help_article(db=db, doc_id="doc_markdown_article")
+
+        assert article is not None
+        assert article.summary == "If you lost access to your login email, ask another Workspace Admin for help."
+        assert [section.title for section in article.contentSections] == ["Lost Access To Login Email"]
+        assert "---" not in article.contentSections[0].body
+        assert "## Lost Access To Login Email" not in article.contentSections[0].body
+        assert article.contentSections[0].body.startswith("If you lost access")
+    finally:
+        db.close()
+
+
+def test_get_help_article_returns_none_for_non_public_or_non_indexed_doc() -> None:
+    engine = create_engine("sqlite:///:memory:")
+    TestingSessionLocal = sessionmaker(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    try:
+        add_help_doc(db, "doc_support", "Support Playbook", "billing", "support")
+        add_help_doc(db, "doc_pending", "Pending Public", "billing", "public", status="pending")
+        service = KnowledgeService(
+            embedding_service=FakeEmbeddingService(),
+            vector_store=FakeVectorStore(),
+        )
+
+        assert service.get_help_article(db=db, doc_id="doc_support") is None
+        assert service.get_help_article(db=db, doc_id="doc_pending") is None
+    finally:
+        db.close()
 
 
 def test_search_keeps_vector_order_when_reranking_disabled(monkeypatch) -> None:

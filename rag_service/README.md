@@ -230,8 +230,20 @@ Implemented endpoints:
 | GET | `/knowledge/docs/{doc_id}` | View one knowledge document record |
 | GET | `/knowledge/docs/{doc_id}/status` | View document indexing status |
 | DELETE | `/knowledge/docs/{doc_id}` | Remove a document and related chunks |
+| GET | `/knowledge/help-articles` | List public indexed documents as customer-facing help articles |
+| GET | `/knowledge/help-articles/{doc_id}` | View one public indexed document as a help article |
 
 All `/knowledge` endpoints require `X-API-Key`.
+
+Customer-facing help articles are extractive: the service only returns stored document metadata and public chunk text. Optional filters:
+
+```bash
+curl "http://localhost:8000/knowledge/help-articles?category=billing&q=refund" \
+  -H "X-API-Key: change-me-dev-key"
+
+curl http://localhost:8000/knowledge/help-articles/doc_001 \
+  -H "X-API-Key: change-me-dev-key"
+```
 
 ## Indexing Status
 

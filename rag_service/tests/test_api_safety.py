@@ -7,7 +7,13 @@ from app.api.deps import get_db
 from app.api import knowledge as knowledge_api
 from app.api.knowledge import get_knowledge_service, router
 from app.core.config import settings
-from app.schemas.knowledge import DocumentListResponse, SearchRequest, SearchResponse
+from app.schemas.knowledge import (
+    DocumentListResponse,
+    HelpArticleListResponse,
+    HelpArticleResponse,
+    SearchRequest,
+    SearchResponse,
+)
 
 
 class FakeApiService:
@@ -23,6 +29,17 @@ class FakeApiService:
         offset: int,
     ) -> DocumentListResponse:
         return DocumentListResponse(items=[], total=0)
+
+    def list_help_articles(
+        self,
+        db: Any,
+        q: str | None = None,
+        category: str | None = None,
+    ) -> HelpArticleListResponse:
+        return HelpArticleListResponse(articles=[])
+
+    def get_help_article(self, db: Any, doc_id: str) -> HelpArticleResponse | None:
+        return None
 
     def search(
         self,
@@ -48,6 +65,16 @@ def test_knowledge_endpoints_reject_missing_api_key(monkeypatch) -> None:
     client = build_client(FakeApiService())
 
     response = client.get("/knowledge/docs")
+
+    assert response.status_code == 401
+
+
+def test_help_articles_reject_missing_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "api_key_auth_enabled", True)
+    monkeypatch.setattr(settings, "internal_api_key", "secret")
+    client = build_client(FakeApiService())
+
+    response = client.get("/knowledge/help-articles")
 
     assert response.status_code == 401
 

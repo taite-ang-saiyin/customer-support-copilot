@@ -11,6 +11,8 @@ from app.schemas.knowledge import (
     DocumentDetail,
     DocumentListResponse,
     DocumentResponse,
+    HelpArticleListResponse,
+    HelpArticleResponse,
     ReindexRequest,
     ReindexResponse,
     SearchRequest,
@@ -110,6 +112,28 @@ def list_documents(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/help-articles", response_model=HelpArticleListResponse)
+def list_help_articles(
+    q: str | None = None,
+    category: str | None = None,
+    db: Session = Depends(get_db),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> HelpArticleListResponse:
+    return service.list_help_articles(db=db, q=q, category=category)
+
+
+@router.get("/help-articles/{doc_id}", response_model=HelpArticleResponse)
+def get_help_article(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    service: KnowledgeService = Depends(get_knowledge_service),
+) -> HelpArticleResponse:
+    article = service.get_help_article(db=db, doc_id=doc_id)
+    if article is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Help article not found")
+    return article
 
 
 @router.get("/docs/{doc_id}", response_model=DocumentDetail)
