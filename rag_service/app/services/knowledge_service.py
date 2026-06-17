@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,6 +15,9 @@ from app.schemas.knowledge import (
     DocumentListResponse,
     DocumentResponse,
     DocumentSummary,
+    HelpArticleListResponse,
+    HelpArticleResponse,
+    HelpArticleSection,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -233,6 +236,52 @@ class KnowledgeService:
             updated_at=doc.updated_at,
             chunk_count=len(doc.chunks),
         )
+
+    def list_help_articles(
+        self,
+        db: Session,
+        q: str | None = None,
+        category: str | None = None,
+    ) -> HelpArticleListResponse:
+        query = (
+            select(KnowledgeDoc)
+            .join(KnowledgeChunk)
+            .where(
+                KnowledgeDoc.indexing_status == "indexed",
+                KnowledgeChunk.access_level == "public",
+            )
+            .order_by(desc(KnowledgeDoc.updated_at), desc(KnowledgeDoc.created_at))
+        )
+        if category:
+            query = query.where(KnowledgeChunk.category == category)
+
+        search_term = (q or "").strip()
+        if search_term:
+            pattern = f"%{search_term}%"
+            query = query.where(
+                or_(
+                    KnowledgeDoc.title.ilike(pattern),
+                    KnowledgeChunk.category.ilike(pattern),
+                    KnowledgeChunk.chunk_text.ilike(pattern),
+                )
+            )
+
+        docs = list(db.scalars(query).unique().all())
+        return HelpArticleListResponse(
+            articles=[
+                self._help_article_response(doc)
+                for doc in docs
+            ]
+        )
+
+    def get_help_article(self, db: Session, doc_id: str) -> HelpArticleResponse | None:
+        doc = db.get(KnowledgeDoc, doc_id)
+        if doc is None or doc.indexing_status != "indexed":
+            return None
+        public_chunks = self._public_chunks(doc)
+        if not public_chunks:
+            return None
+        return self._help_article_response(doc, public_chunks=public_chunks)
 
     def delete_document(self, db: Session, doc_id: str) -> int | None:
         doc = db.get(KnowledgeDoc, doc_id)
@@ -465,6 +514,139 @@ class KnowledgeService:
             chunk_count=chunk_count,
             indexing_error=doc.indexing_error,
         )
+
+    @classmethod
+    def _help_article_response(
+        cls,
+        doc: KnowledgeDoc,
+        public_chunks: list[KnowledgeChunk] | None = None,
+    ) -> HelpArticleResponse:
+        chunks = public_chunks if public_chunks is not None else cls._public_chunks(doc)
+        category = cls._article_category(doc, chunks)
+        sections = cls._article_sections(chunks)
+        summary = cls._article_summary(doc, chunks)
+        return HelpArticleResponse(
+            id=doc.doc_id,
+            title=cls._article_title(doc),
+            category=category,
+            summary=summary,
+            updatedDate=cls._article_updated_date(doc),
+            helpfulCount=0,
+            unhelpfulCount=0,
+            contentSections=sections,
+        )
+
+    @staticmethod
+    def _public_chunks(doc: KnowledgeDoc) -> list[KnowledgeChunk]:
+        return sorted(
+            [
+                chunk
+                for chunk in doc.chunks
+                if chunk.access_level == "public"
+            ],
+            key=lambda chunk: chunk.chunk_index,
+        )
+
+    @staticmethod
+    def _article_sections(chunks: list[KnowledgeChunk]) -> list[HelpArticleSection]:
+        section_order: list[str] = []
+        section_bodies: dict[str, list[str]] = {}
+        seen_texts: set[str] = set()
+
+        for chunk in chunks:
+            title = (chunk.section_title or "").strip() or "Guide"
+            body = KnowledgeService._clean_article_body(
+                chunk.chunk_text,
+                section_title=title,
+            )
+            if not body:
+                continue
+            text_key = re.sub(r"\s+", " ", body).lower()
+            if text_key in seen_texts:
+                continue
+            seen_texts.add(text_key)
+
+            if title not in section_bodies:
+                section_order.append(title)
+                section_bodies[title] = []
+            section_bodies[title].append(body)
+
+        return [
+            HelpArticleSection(
+                title=title,
+                body="\n\n".join(section_bodies[title]),
+            )
+            for title in section_order
+        ]
+
+    @staticmethod
+    def _article_title(doc: KnowledgeDoc) -> str:
+        return doc.title or Path(doc.file_name).stem
+
+    @staticmethod
+    def _article_category(doc: KnowledgeDoc, chunks: list[KnowledgeChunk]) -> str:
+        document_category = getattr(doc, "category", None)
+        if isinstance(document_category, str) and document_category.strip():
+            return document_category.strip()
+
+        if chunks:
+            chunk_category = chunks[0].category.strip()
+            if chunk_category:
+                return chunk_category
+
+        return "General"
+
+    @staticmethod
+    def _article_summary(doc: KnowledgeDoc, chunks: list[KnowledgeChunk]) -> str:
+        document_summary = getattr(doc, "summary", None)
+        if isinstance(document_summary, str) and document_summary.strip():
+            return document_summary.strip()
+
+        first_chunk_text = ""
+        for chunk in chunks:
+            first_chunk_text = KnowledgeService._clean_article_body(
+                chunk.chunk_text,
+                section_title=chunk.section_title,
+            )
+            if first_chunk_text:
+                break
+
+        first_chunk_text = re.sub(r"\s+", " ", first_chunk_text)
+        return first_chunk_text[:160]
+
+    @staticmethod
+    def _clean_article_body(text: str, section_title: str) -> str:
+        body = re.sub(r"\A---\s*\n.*?\n---\s*", "", text.strip(), flags=re.DOTALL)
+        lines = body.splitlines()
+
+        while lines and not lines[0].strip():
+            lines.pop(0)
+
+        while lines:
+            heading = re.match(r"^#{1,6}\s+(.+?)\s*$", lines[0].strip())
+            if not heading:
+                break
+            heading_title = heading.group(1).strip()
+            if KnowledgeService._normalized_title(heading_title) != KnowledgeService._normalized_title(section_title):
+                break
+            lines.pop(0)
+            while lines and not lines[0].strip():
+                lines.pop(0)
+
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _normalized_title(value: str) -> str:
+        return re.sub(r"\s+", " ", value).strip().lower()
+
+    @staticmethod
+    def _article_updated_date(doc: KnowledgeDoc) -> str:
+        updated_at = (
+            getattr(doc, "updated_at", None)
+            or getattr(doc, "indexed_at", None)
+            or doc.created_at
+        )
+        return updated_at.date().isoformat()
 
     @staticmethod
     def _citation(title: str, section_title: str) -> str:

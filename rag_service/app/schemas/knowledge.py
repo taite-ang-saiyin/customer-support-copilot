@@ -39,6 +39,26 @@ class DocumentListResponse(BaseModel):
     total: int
 
 
+class HelpArticleSection(BaseModel):
+    title: str
+    body: str
+
+
+class HelpArticleResponse(BaseModel):
+    id: str
+    title: str
+    category: str
+    summary: str
+    updatedDate: str
+    helpfulCount: int | None
+    unhelpfulCount: int | None
+    contentSections: list[HelpArticleSection]
+
+
+class HelpArticleListResponse(BaseModel):
+    articles: list[HelpArticleResponse]
+
+
 class ReindexRequest(BaseModel):
     doc_id: str | None = None
     force: bool = False

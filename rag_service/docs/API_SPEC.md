@@ -191,6 +191,65 @@ curl "http://localhost:8000/knowledge/docs?source_type=policy" \
 }
 ```
 
+## GET /knowledge/help-articles
+
+### Purpose
+
+List customer-facing help articles extracted from uploaded and indexed RAG documents.
+
+Only documents with `indexing_status="indexed"` and explicit public chunks are returned. The response is extractive only and uses stored document and chunk text.
+
+### Parameters
+
+- `q`: Optional text search over document title, chunk category, and chunk text.
+- `category`: Optional category filter.
+
+### Example Request
+
+```bash
+curl "http://localhost:8000/knowledge/help-articles?category=billing&q=refund" \
+  -H "X-API-Key: change-me-dev-key"
+```
+
+### Example Response
+
+```json
+{
+  "articles": [
+    {
+      "id": "doc_001",
+      "title": "CloudDesk Refund Policy",
+      "category": "billing",
+      "summary": "A duplicate charge occurs when the same workspace is billed twice.",
+      "updatedDate": "2026-06-01",
+      "helpfulCount": 0,
+      "unhelpfulCount": 0,
+      "contentSections": [
+        {
+          "title": "Duplicate Charges",
+          "body": "A duplicate charge occurs when the same workspace is billed twice."
+        }
+      ]
+    }
+  ]
+}
+```
+
+## GET /knowledge/help-articles/{doc_id}
+
+### Purpose
+
+Return one customer-facing help article with all public content sections extracted from stored chunks.
+
+Returns `404` if the document does not exist, is not indexed, or does not have explicit public chunks.
+
+### Example Request
+
+```bash
+curl http://localhost:8000/knowledge/help-articles/doc_001 \
+  -H "X-API-Key: change-me-dev-key"
+```
+
 ## GET /knowledge/docs/{doc_id}
 
 ### Purpose
